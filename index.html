@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>ChatIO</title>
+</head>
+<style>
+body{
+		margin: 12px;
+		height: 100%;
+		/* Permalink - use to edit and share this gradient: https://colorzilla.com/gradient-editor/#1e5799+0,2989d8+50,207cca+51,7db9e8+100;Blue+Gloss+Default */
+		background: rgb(30, 87, 153); /* Old browsers */
+		background: -moz-linear-gradient(45deg, rgba(30, 87, 153, 1) 0%, rgba(41, 137, 216, 1) 50%, rgba(32, 124, 202, 1) 51%, rgba(125, 185, 232, 1) 100%); /* FF3.6-15 */
+		background: -webkit-linear-gradient(45deg, rgba(30, 87, 153, 1) 0%, rgba(41, 137, 216, 1) 50%, rgba(32, 124, 202, 1) 51%, rgba(125, 185, 232, 1) 100%); /* Chrome10-25,Safari5.1-6 */
+		background: linear-gradient(45deg, rgba(30, 87, 153, 1) 0%, rgba(41, 137, 216, 1) 50%, rgba(32, 124, 202, 1) 51%, rgba(125, 185, 232, 1) 100%); /* W3C, IE10+, FF16+, Chrome26+, Opera12+, Safari7+ */
+		filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#1e5799', endColorstr='#7db9e8', GradientType=1); /* IE6-9 fallback on horizontal gradient */;
+    }
+
+#container{
+    width:700px;
+    margin:0 auto;
+}
+
+#chatWindow{
+    height:300px;
+	overflow: auto;
+}
+
+#mainWrapper{
+    display:none;
+}
+
+#chatWrapper{
+    float:left;
+    border:1px #ccc solid;
+    border-radius: 10px;
+    background:#f4f4f4;
+    padding:10px;
+}
+
+#userWrapper{
+    float:left;
+    border:1px #ccc solid;
+    border-radius: 10px;
+    background:#f4f4f4;
+    padding:10px;
+    margin-left:20px;
+    width:200px;
+    max-height:250px;
+	overflow: auto;
+}
+
+#namesWrapper{
+    float:left;
+    border:1px #ccc solid;
+    border-radius: 10px;
+    background:#f4f4f4;
+    padding:10px;
+    margin-left:20px;
+}
+
+input{
+    height:30px;
+    border:solid 1px #ccc;
+}
+	#user_connected{
+		color: #1c7430;
+		text-align: center;
+		padding-top: 3px;
+	}
+	#footer{
+		position: fixed;
+		bottom: 0;
+		width: 100%;
+		justify-content: center;
+
+	}
+	#footer p{
+		text-align: center;
+	}
+</style>
+<body>
+	<div id="container">
+		<div id="namesWrapper">
+			<h2>Browser Chat</h2>
+			<p>Create Username:</p>
+			<div id="error"></div>
+			<form id="usernameForm">
+				<input type="text" size="35" id="username">
+				<input type="submit" value="Submit">
+			</form>
+		</div>
+
+		<div id="mainWrapper">
+			<h2>Chat-Room</h2>
+			<div id="chatWrapper">
+				<div id="chatWindow">
+					<p id="feedback"></p>
+				</div>
+				<form id="messageForm">
+					<input type="text" size="35" id="message" placeholder="Message...">
+					<input type="submit" value="Submit">
+				</form>
+			</div>
+
+			<div id="userWrapper">
+				<h4 id="user_connected">Users connected</h4>
+				<div id="users"></div>
+			</div>
+		</div>
+	</div>
+	<div id="footer">
+		<p >Copyrigth&copy; 2020 Amar-syll</p>
+	</div>
+	<script src="http://code.jquery.com/jquery-latest.min.js"></script>
+		<script src="/socket.io/socket.io.js"></script>
+	<script>
+		$(function(){
+			let socket = io.connect();
+			let $messageForm = $('#messageForm');
+			let $message = $('#message');
+			let $chat = $('#chatWindow');
+			let $usernameForm = $('#usernameForm');
+			let $users = $('#users');
+			let $username = $('#username');
+			let $error = $('#error');
+			let $feedback = $('#feedback')
+			$usernameForm.submit(function(e){
+				e.preventDefault();
+				socket.emit('new user', $username.val(), function(data){
+					if(data){
+						$('#namesWrapper').hide();
+						$('#mainWrapper').show();
+					} else{
+						$error.html('Username is taken');
+					}
+				});
+			});
+
+			socket.on('usernames', function(data){
+				let html = '';
+				for(i = 0;i < data.length;i++){
+					html += data[i] + '<br>';
+				}
+				$users.html(html);
+			});
+
+			$messageForm.submit(function(e){
+				e.preventDefault();
+				socket.emit('send message', $message.val());
+				$message.val('');
+			});
+
+			socket.on('new message', function(data){
+				$feedback.html('');
+				$chat.append('<strong>'+data.user+'</strong>: '+data.msg+'<br>');
+			});
+			//Emit typing
+			$message.bind("keypress", () => {
+				socket.emit('typing')
+			})
+            //on typing
+			socket.on('typing',function (data) {
+
+				$feedback.html("<p><i>" + data.username + " is typing ..." + "</i></p>")
+
+			})
+		});
+	</script>
+</body>
+</html>
