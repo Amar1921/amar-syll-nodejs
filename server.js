@@ -1,55 +1,80 @@
-var express = require('express'),
-	app = express(),
-	server = require('http').createServer(app),
-	io = require('socket.io').listen(server);
-	usernames = [];
+const express = require('express');
+const http = require('http');
+const socketIO = require('socket.io');
+const path = require('path');
 
-server.listen(process.env.PORT || 3080);
-console.log('Server Running on port 3080...');
+const app = express();
+const server = http.createServer(app);
+const io = socketIO(server);
 
-app.get('/', function(req, res){
-	res.sendFile(__dirname + '/index.html');
+const PORT = process.env.PORT || 3080;
 
-	
+// Map username -> socket.id pour éviter les doublons et faciliter la gestion
+const connectedUsers = new Map();
+
+server.listen(PORT, () => {
+  console.log(`✅ Server running on http://localhost:${PORT}`);
 });
 
-io.sockets.on('connection', function(socket){
-	console.log('New user connected...');
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 
-	socket.on('new user', function(data, callback){
-		if(usernames.indexOf(data) !== -1){
-			callback(false);
-		} else {
-			callback(true);
-			socket.username = data;
-			usernames.push(socket.username);
-			updateUsernames();
-		}
-	});
+io.on('connection', (socket) => {
+  console.log(`🔌 New connection: ${socket.id}`);
 
-	// Update Usernames
-	function updateUsernames(){
-		io.sockets.emit('usernames', usernames);
-	}
+  // Enregistrement du pseudo
+  socket.on('new user', (username, callback) => {
+    const trimmed = (username || '').trim();
 
-	// Send Message
-	socket.on('send message', function(data){
-		io.sockets.emit('new message', {msg: data, user:socket.username});
-	});
+    if (!trimmed) {
+      return callback({ success: false, error: 'Username cannot be empty.' });
+    }
 
-	// Disconnect
-	socket.on('disconnect', function(data){
-		if(!socket.username){
-			return;
-		}
+    if (connectedUsers.has(trimmed)) {
+      return callback({ success: false, error: 'Username is already taken.' });
+    }
 
-		usernames.splice(usernames.indexOf(socket.username), 1);
-		updateUsernames();
-	});
+    socket.username = trimmed;
+    connectedUsers.set(trimmed, socket.id);
 
+    broadcastUserList();
 
-	//listen on typing
-	socket.on('typing', (data) => {
-		socket.broadcast.emit('typing', {username : socket.username})
-	})
+    io.emit('system message', `${trimmed} joined the chat.`);
+    console.log(`👤 User joined: ${trimmed}`);
+
+    callback({ success: true });
+  });
+
+  // Envoi d'un message
+  socket.on('send message', (msg) => {
+    if (!socket.username || !msg || !msg.trim()) return;
+
+    io.emit('new message', {
+      user: socket.username,
+      msg: msg.trim(),
+      timestamp: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+    });
+  });
+
+  // Indicateur de frappe (broadcast uniquement aux autres)
+  socket.on('typing', () => {
+    if (!socket.username) return;
+    socket.broadcast.emit('typing', { username: socket.username });
+  });
+
+  // Déconnexion
+  socket.on('disconnect', () => {
+    if (!socket.username) return;
+
+    connectedUsers.delete(socket.username);
+    broadcastUserList();
+
+    io.emit('system message', `${socket.username} left the chat.`);
+    console.log(`❌ User left: ${socket.username}`);
+  });
+
+  function broadcastUserList() {
+    io.emit('usernames', Array.from(connectedUsers.keys()));
+  }
 });
